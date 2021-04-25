@@ -21,8 +21,8 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 #ifndef lint
-static char rcsid[] =
-    "@(#) $Header: /usr/home/minshall/src/mine/tcpdpriv/RCS/tcpdutil.c,v 1.6 1997/08/28 00:03:04 minshall Exp $ (LBL)";
+static const char rcsid[] =
+    "@(#) $Header: /Users/minshall/src/mine/tcpdpriv/RCS/tcpdutil.c,v 1.9 2005/11/01 02:23:29 minshall Exp $ (LBL)";
 #endif
 
 #include <sys/types.h>
@@ -32,6 +32,7 @@ static char rcsid[] =
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 
 #include <pcap.h>
@@ -143,7 +144,7 @@ read_infile(char *fname)
 
 
 void
-bpf_dump(FILE *output, struct bpf_program *p, int option)
+tcpd_bpf_dump(FILE *output, struct bpf_program *p, int option)
 {
 	struct bpf_insn *insn;
 	int i;

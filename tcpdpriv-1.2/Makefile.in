@@ -1,4 +1,4 @@
-# $Id: Makefile.in,v 1.23 1996/12/10 05:10:13 minshall Exp $
+# $Id: Makefile.in,v 1.30 2005/11/01 04:24:30 minshall Exp $
 
 # Targets (for user):
 #	all (default)	-	makes tcpdpriv
@@ -6,11 +6,11 @@
 #	distclean -		does a "clean", and removes Makefile
 #
 # Targets (for maintainer):
-#	distribution -		makes the .tar.Z and .web.tar files
+#	distribution -		makes the .tar.gz and .web.tar files
 #	webinstall -		installs the .web.tar file in
 #				    ${HOME}/public_html/dist/sw
 #	maintainer-clean -	does a "distclean" and removes .0, .0.txt,
-#				    any .tar, .tar.Z, and .web.tar.
+#				    any .tar, .tar.gz, and .web.tar.
 
 # version for distribution...
 VERS=`cat VERSION`
@@ -29,7 +29,10 @@ LIBPCAP = -lpcap
 
 #have-SVR4#LIBSVR4 = -lsocket -lnsl
 
-CFLAGS	= -g ${INCLUDES} ${WARNINGS} ${SVR4} ${OSF1}
+#have-NETINETFDDI = -DNETINETFDDI
+#have-NETFDDI = -DNETFDDI
+
+CFLAGS	= -g ${INCLUDES} ${WARNINGS} ${SVR4} ${OSF1} ${NETINETFDDI} ${NETFDDI}
 
 SOURCES = tcpdpriv.c tcpdutil.c tcpdpriv.1 tcpdpriv.vtml \
 				attack50.tex Makefile.in configure INSTALL
@@ -40,7 +43,33 @@ DISTRIBUTION = ${SOURCES} tcpdpriv.0 tcpdpriv.0.txt tcpdpriv.html \
 
 all:	tcpdpriv
 
-distribution:	fixrev tcpdpriv-${VERS}.tar.Z tcpdpriv.web.tar
+distribution:	checklocks ${DISTRIBUTION} fixrev tag
+	@ echo creating tcpdpriv-`cat VERSION`
+	@ mkdir tcpdpriv-`cat VERSION`
+	@ echo filling tcpdpriv-`cat VERSION`
+	@ tar cf - ${DISTRIBUTION} tcpdpriv.html | \
+				(cd tcpdpriv-`cat VERSION`; tar xf -)
+	@ echo making files in tcpdpriv-`cat VERSION` writable
+	@ (cd tcpdpriv-`cat VERSION`; chmod u+w ${DISTRIBUTION}; cd ..)
+	@ echo creating tcpdpriv-`cat VERSION`.tar
+	@ tar cf tcpdpriv-`cat VERSION`.tar tcpdpriv-`cat VERSION`
+	@ echo removing tcpdpriv-`cat VERSION`
+	@ rm -rf tcpdpriv-`cat VERSION`
+	@ echo gzipping tcpdpriv-`cat VERSION`.tar
+	@ gzip tcpdpriv-`cat VERSION`.tar
+	@ echo tcpdpriv-`cat VERSION`.tar.gz now ready for distribution
+	@ echo building web distribution
+	@ tar cf tcpdpriv.web.-`cat VERSION`.tar \
+			tcpdpriv-`cat VERSION`.tar.gz \
+			tcpdpriv.html tcpdpriv.0.txt attack50/attack50.html
+
+checklocks:
+	@rlog -R -L ${SOURCES} | \
+			awk '{print "RCS says LOCKED FILES exist!!!"; exit 1}'
+
+tag:
+	@ echo tagging files
+	@ rcs -q -nVERSION_`cat VERSION | sed s/[.]/_/g`: ${SOURCES}
 
 webinstall: distribution
 	install tcpdpriv.web.tar ${HOME}/public_html/dist/sw
@@ -56,7 +85,7 @@ distclean: clean
 
 maintainer-clean: distclean
 	-rm -f tcpdpriv.0 tcpdpriv.0.txt tcpdpriv.html tcpdpriv-*.tar \
-		    tcpdpriv-*.tar.Z tcpdpriv.web.tar \
+		    tcpdpriv-*.tar.gz tcpdpriv.web.tar \
 		    attack50.ps attack50/attack50.html
 	-rmdir attack50
 
@@ -110,18 +139,9 @@ tcpdpriv.html:	tcpdpriv.vtml VERSION
 	sed -e "s/__VERSION__/${VERS}/g" -e "s/__DATE__/`date "+%d %h %y"`/g" \
 					tcpdpriv.vtml > tcpdpriv.html
 
-tcpdpriv-${VERS}.tar.Z:	${DISTRIBUTION}
-	tar cf tcpdpriv-${VERS}.tar ${DISTRIBUTION}
-	rm -f tcpdpriv-${VERS}.tar.Z
-	compress tcpdpriv-${VERS}.tar
-
-tcpdpriv.web.tar:	tcpdpriv-${VERS}.tar.Z
-	tar cf tcpdpriv.web.tar tcpdpriv-${VERS}.tar.Z \
-			tcpdpriv.html tcpdpriv.0.txt attack50/attack50.html
-
 attack50/attack50.html:     attack50.tex
 	latex2html -split 0 -info "" \
-	    -address "greg minshall <a href=mailto:minshall@ipsilon.com>&lt; minshall@ipsilon.com&gt;</a>" \
+	    -address "greg minshall <a href=mailto:minshall@acm.org>&lt; minshall@acm.org&gt;</a>" \
 	    attack50
 
 attack50.dvi:	attack50.tex

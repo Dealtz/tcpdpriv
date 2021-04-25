@@ -30,8 +30,8 @@
  * SUCH DAMAGE.
  */
 #ifndef lint
-static char rcsid[] =
-    "@(#) $Header: /usr/home/minshall/src/mine/tcpdpriv/RCS/tcpdpriv.c,v 1.43 1997/08/28 00:07:14 minshall Exp $";
+static const char rcsid[] =
+    "@(#) $Header: /Users/minshall/src/mine/tcpdpriv/RCS/tcpdpriv.c,v 1.47 2005/11/01 02:29:46 minshall Exp $";
 #endif
 
 /*
@@ -54,7 +54,7 @@ static char rcsid[] =
  *	8.  Should we retain local subnet broadcast information?
  *     11.  PRIVACY for TCP sequence numbers???
  *
- * $Id: tcpdpriv.c,v 1.43 1997/08/28 00:07:14 minshall Exp $
+ * $Id: tcpdpriv.c,v 1.47 2005/11/01 02:29:46 minshall Exp $
  */
 
 #include <unistd.h>
@@ -88,12 +88,17 @@ static char rcsid[] =
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#if !defined(sun)
+#if (!defined(sun)) && !((defined(__APPLE__) && defined(__MACH__)))
 #include <net/slcompress.h>
 #if	!defined(osf1)
 #include <net/slip.h>
 #endif	/* !defined(osf1) */
+#if     defined(NETINETFDDI)
 #include <netinet/if_fddi.h>
+#endif  /* defined(NETINETFDDI) */
+#if     defined(NETFDDI)
+#include <netinet/if_fddi.h>
+#endif  /* defined(NETFDDI) */
 #include <net/if_llc.h>
 #endif	/* !defined(sun) */
 
@@ -118,6 +123,14 @@ typedef u_int bpf_u_int32;
 #endif /* ((PCAP_VERSION_MAJOR < 2) || (PCAP_VERSION_MINOR < 4)) */
 
 
+
+/*
+ * Solaris doesn't define IP_OFFMASK
+ */
+
+#if	!defined(IP_OFFMASK)
+#define    IP_OFFMASK 0x1fff               /* mask for fragmenting bits */
+#endif	/* !defined(IP_OFFMASK) */
 
 /*
  * general defines...
@@ -1499,10 +1512,20 @@ dlt_hdrlen(int dlt)
 }
 
 static void
+usage(char *cmd)
+{
+    fprintf(stderr,
+	"usage:\n%s [-Opq] [-a [[hh:]mm:]ss] [-A {0|1|2|50|99}] [-c count]"
+	"\n\t\t[-C {0|1|2|3|4|...|32|99}] [-F file] [-i interface]"
+	"\n\t\t[-M {0|10|20|70|80|90|99}] [-{P|T|U} {0|1|99}] [-r file]"
+	"\n\t\t[-s snaplen] [-w outputfile] [expression]\n", cmd);
+    fprintf(stderr, "(one reasonable choice:  %s -P99 -C4 -M20 ...)\n", cmd);
+    exit(1);
+}
+
+static void
 verify_and_print_args(char *cmd)
 {
-    static void usage(char *cmd);
-
     lookup_init(&addr_propagate);
 
     lookup_init(&addr_whole);
@@ -1745,22 +1768,10 @@ cleanup(int signo)
     exit(0);
 }
 
-static void
-usage(char *cmd)
-{
-    fprintf(stderr,
-	"usage:\n%s [-Opq] [-a [[hh:]mm:]ss] [-A {0|1|2|50|99}] [-c count]"
-	"\n\t\t[-C {0|1|2|3|4|...|32|99}] [-F file] [-i interface]"
-	"\n\t\t[-M {0|10|20|70|80|90|99}] [-{P|T|U} {0|1|99}] [-r file]"
-	"\n\t\t[-s snaplen] [-w outputfile] [expression]\n", cmd);
-    fprintf(stderr, "(one reasonable choice:  %s -P99 -C4 -M20 ...)\n", cmd);
-    exit(1);
-}
-
 int
 main(int argc, char *argv[], char *envp[])
 {
-    void bpf_dump(FILE *output, struct bpf_program *, int);
+    void tcpd_bpf_dump(FILE *output, struct bpf_program *, int);
     char *copy_argv(register char **argv);
     char *read_infile(char *fname);
     char *rfile, *wfile;
@@ -1895,7 +1906,7 @@ main(int argc, char *argv[], char *envp[])
 
     /* dump? */
     if (dflag) {
-	bpf_dump(stderr, &fcode, dflag);
+	tcpd_bpf_dump(stderr, &fcode, dflag);
 	exit(0);
     }
 

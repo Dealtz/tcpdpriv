@@ -5,6 +5,9 @@
 set gcc
 set SVR4
 set OSF1
+# if_fddi.h may live in one of two places...
+set NETFDDI
+set NETINETFDDI
 
 gcc -v >& /dev/null
 if ( $status == 0 ) set gcc='-e s/^#have-gcc#//'
@@ -18,6 +21,14 @@ if ( `uname -s` == "OSF1" ) then
 	set OSF1='-e s/^#have-OSF1#//'
 	if ( $gcc == "" ) echo "compile errors?  maybe because you need an ANSI-compatible compiler like gcc..."
 endif
+
+# where does if_fddi.h live?  <netinet/if_fddi.h> or <net/if_fddi.h>
+ls /usr/include/netinet/if_fddi.h >& /dev/null
+if ( $status == 0 ) set NETINETFDDI='s/^#have-NETINETFDDI#//'
+
+ls /usr/include/net/if_fddi.h >& /dev/null
+if ( $status == 0 ) set NETFDDI='s/^#have-NETFDDI#//'
+
 
 sed -e 's/^#have-none#//' $gcc $SVR4 $OSF1 Makefile.in > Makefile
 chmod ug+w Makefile
