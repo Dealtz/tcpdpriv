@@ -62,17 +62,21 @@ static char rcsid[] =
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#if defined(linux)
+#define __FAVOR_BSD 1
+#endif
+
 #if	defined(SVR4)
 #include <sys/statvfs.h>
 #endif	/* defined(SVR4) */
 #include <sys/param.h>
 #include <sys/time.h>
-#if	!defined(SVR4)
+#if	!defined(SVR4) && !defined(linux)
 #include <sys/ucred.h>
 #endif	/* !defined(SVR4) */
 #include <sys/mount.h>
 #include <sys/socket.h>
-#if	defined(sun)
+#if	defined(sun) || defined(linux)
 #include <sys/vfs.h>
 #endif	/* defined(sun) */
 
@@ -80,7 +84,7 @@ static char rcsid[] =
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#if	!defined(SVR4)
+#if	!defined(SVR4) && !defined(linux)
 #include <sys/mbuf.h>
 #endif	/* !defined(SVR4) */
 #include <netinet/in_systm.h>
@@ -88,7 +92,7 @@ static char rcsid[] =
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#if !defined(sun)
+#if !defined(sun) && !defined(linux)
 #include <net/slcompress.h>
 #if	!defined(osf1)
 #include <net/slip.h>
@@ -312,7 +316,7 @@ nodehdr_t
     /* options (from command line) */
 int
     opt_ipaddr, opt_mcastaddr, opt_tcpports, opt_udpports,
-    opt_class;
+    opt_class, opt_options;
 
 int
     qflag = 0;		/* -q */
@@ -466,7 +470,7 @@ rand_start(void)
 	 * whereas BSD uses "device on mountpoint".
 	 */
 
-    pfd = popen("/sbin/mount", "r");
+    pfd = popen("/bin/mount", "r");
     if (pfd == NULL) {
 	pfd = popen("mount", "r");
 	if (pfd == NULL) {
@@ -956,8 +960,9 @@ hide_addr(u_long addr, u_int ttl)
 {
     u_long answer;
 
-    if (IN_CLASSD(addr) && (ttl >= optTOttlLOW(opt_mcastaddr))) {
-	return addr;
+    if (addr == INADDR_ANY || addr == INADDR_BROADCAST
+	|| (IN_CLASSD(addr) && (ttl >= optTOttlLOW(opt_mcastaddr)))) {
+      return addr;
     }
 
     switch (opt_ipaddr) {
@@ -1028,18 +1033,10 @@ hide_udpport(u_short udpport)
     return hide_port(udpport,
 	    &udpport_whole, &udpport_byte_0, &udpport_byte_1, opt_udpports);
 }
-
-/*
- *   T   C   P
- */
 
-
-/* 
- * deal with TCP options
- */
 
 static u_char *
-dumptcpoptions(u_char *p, int caplen, int length, struct tcphdr *tcp)
+hide_tcpoptions(u_char *p, int caplen, int length, struct tcphdr *tcp)
 {
     u_short *usp;
     int optlen;
@@ -1049,9 +1046,11 @@ dumptcpoptions(u_char *p, int caplen, int length, struct tcphdr *tcp)
     optlen = (tcp->th_off*4)-sizeof *tcp;
     sumoff = 0;		/* reset this... */
     while ((optlen >= 2) && (caplen >= 2)) {
-	sumoff = cksum_subtract(sumoff, *usp);
-	*usp = ntohs(0x0101);  /* no ops (doesn't need ntohs(), but...) */
-	sumoff = cksum_add(sumoff, *usp);
+        if (opt_options == 0) {
+	    sumoff = cksum_subtract(sumoff, *usp);
+	    *usp = ntohs(0x0101);  /* no ops (doesn't need ntohs(), but...) */
+	    sumoff = cksum_add(sumoff, *usp);
+	}
 	usp++; optlen -= 2; caplen -= 2;
     }
     tcp->th_sum = cksum_adjust(tcp->th_sum, sumoff);
@@ -1059,6 +1058,29 @@ dumptcpoptions(u_char *p, int caplen, int length, struct tcphdr *tcp)
     return (u_char *)usp;
 }
 
+
+static u_char *
+hide_ipoptions(u_char *p, int caplen, int length, struct ip *ip)
+{
+    u_short *usp;
+    int optlen;
+
+    usp = (u_short *)p;
+    optlen = (ip->ip_hl*4)-sizeof *ip;
+    while ((optlen >= 2) && (caplen >= 2)) {
+        if (opt_options == 0) {
+	    ip->ip_sum = cksum_subtract(ip->ip_sum, *usp);
+	    *usp = ntohs(0x0101);  /* no ops (doesn't need ntohs(), but...) */
+	    ip->ip_sum = cksum_add(ip->ip_sum, *usp);
+	}
+	usp++; optlen -= 2; caplen -= 2;
+    }
+    return (u_char *)usp;
+}
+
+/*
+ *   T   C   P
+ */
 
 /*
  * Munge a TCP header.
@@ -1128,7 +1150,7 @@ dumptcp(u_char *p, int caplen, int length, u_long phoffset)
 
     /* now, deal with options... */
     if ((tcp->th_off*4) > sizeof *tcp) {
-	u_char *newp = dumptcpoptions(p, caplen, length, tcp);
+	u_char *newp = hide_tcpoptions(p, caplen, length, tcp);
 	int diff = newp-p;
 
 	p += diff; caplen -= diff; length -= diff;
@@ -1142,7 +1164,7 @@ dumptcp(u_char *p, int caplen, int length, u_long phoffset)
  */
 
 
-/* 
+/*
  * dump a udp packet.  we don't do much, just mask the ports
  * and update the checksum (if necessary).
  *
@@ -1215,28 +1237,6 @@ dumpudp(u_char *p, int caplen, int length, u_long phoffset)
  *   I   P
  */
 
-
-/* 
- * deal with IP options
- */
-
-static u_char *
-dumpipoptions(u_char *p, int caplen, int length, struct ip *ip)
-{
-    u_short *usp;
-    int optlen;
-
-    usp = (u_short *)p;
-    optlen = (ip->ip_hl*4)-sizeof *ip;
-    while ((optlen >= 2) && (caplen >= 2)) {
-	ip->ip_sum = cksum_subtract(ip->ip_sum, *usp);
-	*usp = ntohs(0x0101);  /* no ops (doesn't need ntohs(), but...) */
-	ip->ip_sum = cksum_add(ip->ip_sum, *usp);
-	usp++; optlen -= 2; caplen -= 2;
-    }
-    return (u_char *)usp;
-}
-
 /*
  * this is an IP packet --- output it securely.
  *
@@ -1300,7 +1300,7 @@ dumpip(u_char *p, int caplen, int length)
     }
 
     if ((ip->ip_hl*4) > sizeof *ip) {		/* options! */
-	u_char *newp = dumpipoptions(p, caplen, length, ip);
+	u_char *newp = hide_ipoptions(p, caplen, length, ip);
 	int diff = newp-p;
 
 	p += diff; caplen -= diff; length -= diff;
@@ -1336,7 +1336,7 @@ dumpip(u_char *p, int caplen, int length)
 
 
 /*
- * this routine is largely cribbed from various bits and pieces of 
+ * this routine is largely cribbed from various bits and pieces of
  * tcpdump(1).
  *
  * also, we keep to much of the tcpdump internal conventions, since
@@ -1608,7 +1608,7 @@ verify_and_print_args(char *cmd)
 	if (!qflag) {
 	    fprintf(stderr,
 		"# multicast addressses in datagrams scoped node-local\n");
-	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n", 
+	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n",
 				    optTOttlLOW(MCAST_OPT_NODE_LOCAL),
 				    optTOttlHIGH(MCAST_OPT_NODE_LOCAL));
 	}
@@ -1616,7 +1616,7 @@ verify_and_print_args(char *cmd)
 	if (!qflag) {
 	    fprintf(stderr,
 		"# multicast addressses in datagrams scoped link-local\n");
-	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n", 
+	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n",
 				    optTOttlLOW(MCAST_OPT_LINK_LOCAL),
 				    optTOttlHIGH(MCAST_OPT_LINK_LOCAL));
 	}
@@ -1624,7 +1624,7 @@ verify_and_print_args(char *cmd)
 	if (!qflag) {
 	    fprintf(stderr,
 		"# multicast addressses in datagrams scoped site-local\n");
-	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n", 
+	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n",
 				    optTOttlLOW(MCAST_OPT_SITE_LOCAL),
 				    optTOttlHIGH(MCAST_OPT_SITE_LOCAL));
 	}
@@ -1632,7 +1632,7 @@ verify_and_print_args(char *cmd)
 	if (!qflag) {
 	    fprintf(stderr,
 		"# multicast addressses in datagrams scoped continent-local\n");
-	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n", 
+	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n",
 				    optTOttlLOW(MCAST_OPT_CONTINENT_LOCAL),
 				    optTOttlHIGH(MCAST_OPT_CONTINENT_LOCAL));
 	}
@@ -1640,7 +1640,7 @@ verify_and_print_args(char *cmd)
 	if (!qflag) {
 	    fprintf(stderr,
 		"# multicast addressses in datagrams scoped global\n");
-	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n", 
+	    fprintf(stderr, "#\t(%d <= ttl <= %d) passed through unchanged\n",
 				    optTOttlLOW(MCAST_OPT_GLOBAL),
 				    optTOttlHIGH(MCAST_OPT_GLOBAL));
 	}
@@ -1760,7 +1760,7 @@ usage(char *cmd)
 int
 main(int argc, char *argv[], char *envp[])
 {
-    void bpf_dump(FILE *output, struct bpf_program *, int);
+    void local_bpf_dump(FILE *output, struct bpf_program *, int);
     char *copy_argv(register char **argv);
     char *read_infile(char *fname);
     char *rfile, *wfile;
@@ -1786,7 +1786,7 @@ main(int argc, char *argv[], char *envp[])
     dflag = 0;
     pflag = 0;
     Oflag = 0;
-    while ((ch = getopt(argc, argv, "a:A:c:C:dF:i:M:OpP:qr:s:T:U:w:")) != EOF) {
+    while ((ch = getopt(argc, argv, "a:A:c:C:dF:i:M:OpP:qr:s:S:T:U:w:")) != EOF) {
 	switch (ch) {
 	case 'a':
 	    alarm = optarg;
@@ -1829,6 +1829,9 @@ main(int argc, char *argv[], char *envp[])
 	    break;
 	case 's':
 	    snaplen = atoi(optarg);
+	    break;
+	case 'S':
+	    opt_options = atoi(optarg);
 	    break;
 	case 'T':
 	    opt_tcpports = atoi(optarg);
@@ -1895,7 +1898,7 @@ main(int argc, char *argv[], char *envp[])
 
     /* dump? */
     if (dflag) {
-	bpf_dump(stderr, &fcode, dflag);
+	local_bpf_dump(stderr, &fcode, dflag);
 	exit(0);
     }
 

@@ -1,23 +1,29 @@
-#!/bin/csh -f
+#!/bin/sh
 
 # cheap hack to make things portable (but, note this is csh!)
 
-set gcc
-set SVR4
-set OSF1
+gcc=
+SVR4=
+OSF1=
 
-gcc -v >& /dev/null
-if ( $status == 0 ) set gcc='-e s/^#have-gcc#//'
+if gcc -v >& /dev/null; then
+    gcc='-e s/^#have-gcc#//'
+fi
 
-if ( `uname -s` == "SunOS" ) then
-	if ( `uname -r | sed "s/\..*//"` == "5" ) set SVR4='-e s/^#have-SVR4#//'
-	if ( $gcc == "" ) echo "compile errors?  maybe because you need an ANSI-compatible compiler like gcc..."
-endif
+if [ "`uname -s`" = "SunOS" ]; then
+    if [ "`uname -r | sed 's/\..*//'`" = "5" ]; then
+	SVR4='-e s/^#have-SVR4#//'
+    fi
+fi
 
-if ( `uname -s` == "OSF1" ) then
-	set OSF1='-e s/^#have-OSF1#//'
-	if ( $gcc == "" ) echo "compile errors?  maybe because you need an ANSI-compatible compiler like gcc..."
-endif
+if [ "`uname -s`" = "OSF1" ]; then
+    OSF1='-e s/^#have-OSF1#//'
+fi
+if [ "$gcc" = "" ]; then
+    echo "compile errors?  maybe because you need an ANSI-compatible compiler like gcc..."
+fi
 
-sed -e 's/^#have-none#//' $gcc $SVR4 $OSF1 Makefile.in > Makefile
+VERSION="-e s/#__VERSION__#/`cat VERSION`/"
+
+sed -e 's/^#have-none#//' $gcc $SVR4 $OSF1 $VERSION Makefile.in > Makefile
 chmod ug+w Makefile

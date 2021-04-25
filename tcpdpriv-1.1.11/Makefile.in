@@ -6,18 +6,13 @@
 #	distclean -		does a "clean", and removes Makefile
 #
 # Targets (for maintainer):
-#	distribution -		makes the .tar.Z and .web.tar files
-#	webinstall -		installs the .web.tar file in
-#				    ${HOME}/public_html/dist/sw
+#	distribution -		makes the .tar.gz file
+#	webinstall -		installs the WEBFILES in WEBHOME
 #	maintainer-clean -	does a "distclean" and removes .0, .0.txt,
-#				    any .tar, .tar.Z, and .web.tar.
+#				    any .tar and .tar.gz
 
 # version for distribution...
-VERS=`cat VERSION`
-
-LIBPATH = -L/usr/local/lib
-
-INCLUDES = -I/usr/local/include -I${HOME}/usr/include
+VERS=#__VERSION__#
 
 LIBPCAP = -lpcap
 
@@ -29,25 +24,28 @@ LIBPCAP = -lpcap
 
 #have-SVR4#LIBSVR4 = -lsocket -lnsl
 
-CFLAGS	= -g ${INCLUDES} ${WARNINGS} ${SVR4} ${OSF1}
+CFLAGS	= -g ${WARNINGS} ${SVR4} ${OSF1}
 
 SOURCES = tcpdpriv.c tcpdutil.c tcpdpriv.1 tcpdpriv.vtml \
-				attack50.tex Makefile.in configure INSTALL
+	  attack50.tex Makefile.in configure INSTALL
 
 DISTRIBUTION = ${SOURCES} tcpdpriv.0 tcpdpriv.0.txt tcpdpriv.html \
-				attack50/attack50.html attack50.ps
+	       attack50/attack50.html attack50.ps
+
+WEBFILES = tcpdpriv-${VERS}.tar.gz tcpdpriv.html tcpdpriv.0.txt \
+	   attack50/attack50.html
 
 
 all:	tcpdpriv
 
-distribution:	fixrev tcpdpriv-${VERS}.tar.Z tcpdpriv.web.tar
+#distribution:	fixrev tcpdpriv-${VERS}.tar.gz
+distribution: Makefile tcpdpriv-${VERS}.tar.gz
 
 webinstall: distribution
-	install tcpdpriv.web.tar ${HOME}/public_html/dist/sw
+	tar -cf- ${WEBFILES} | (cd ${HOME}/www/software/tcpdpriv; tar -xvf -)
 
 clean:
 	-rm -f tcpdpriv tcpdpriv.o tcpdutil.o *.core \
-	    attack50.aux attack50.dvi attack50.log \
 	    attack50/.ID_MAP.db attack50/.IMG_PARAMS.db attack50/.ORIG_MAP.db \
 	    attack50/attack50.css attack50/contents.pl attack50/sections.pl
 
@@ -56,8 +54,7 @@ distclean: clean
 
 maintainer-clean: distclean
 	-rm -f tcpdpriv.0 tcpdpriv.0.txt tcpdpriv.html tcpdpriv-*.tar \
-		    tcpdpriv-*.tar.Z tcpdpriv.web.tar \
-		    attack50.ps attack50/attack50.html
+		    tcpdpriv-*.tar.gz attack50.ps attack50/attack50.html
 	-rmdir attack50
 
 # keep version numbers going... (assume always at least "x.y")
@@ -96,36 +93,34 @@ fixrev:
 	mv VERSION.new VERSION
 	ci -u -m"new fix version" VERSION
 
-tcpdpriv:	tcpdpriv.o tcpdutil.o
-	${CC} ${CFLAGS} -o tcpdpriv ${LDFLAGS} tcpdpriv.o tcpdutil.o \
-					    ${LIBPATH} ${LIBPCAP} ${LIBSVR4}
+Makefile: Makefile.in configure
+	configure
 
-tcpdpriv.0:	tcpdpriv.1
+tcpdpriv: Makefile tcpdpriv.o tcpdutil.o
+	${CC} ${CFLAGS} -o tcpdpriv ${LDFLAGS} tcpdpriv.o tcpdutil.o \
+	  ${LIBPCAP} ${LIBSVR4}
+
+man: tcpdpriv.0 tcpdpriv.0.txt tcpdpriv.html
+
+tcpdpriv.0: Makefile tcpdpriv.1
 	nroff -man tcpdpriv.1 > tcpdpriv.0
 
-tcpdpriv.0.txt:	tcpdpriv.0
-	colcrt < tcpdpriv.0 > tcpdpriv.0.txt
+tcpdpriv.0.txt:	Makefile tcpdpriv.0
+	colcrt - < tcpdpriv.0 > tcpdpriv.0.txt
 
-tcpdpriv.html:	tcpdpriv.vtml VERSION
-	sed -e "s/__VERSION__/${VERS}/g" -e "s/__DATE__/`date "+%d %h %y"`/g" \
+tcpdpriv.html:	Makefile tcpdpriv.vtml VERSION
+	sed -e "s/__VERSION__/${VERS}/g" -e "s/__DATE__/`date --iso`/g" \
 					tcpdpriv.vtml > tcpdpriv.html
 
-tcpdpriv-${VERS}.tar.Z:	${DISTRIBUTION}
-	tar cf tcpdpriv-${VERS}.tar ${DISTRIBUTION}
-	rm -f tcpdpriv-${VERS}.tar.Z
-	compress tcpdpriv-${VERS}.tar
+tcpdpriv-${VERS}.tar.gz: ${DISTRIBUTION}
+	tar -zcf tcpdpriv-${VERS}.tar.gz ${DISTRIBUTION}
 
-tcpdpriv.web.tar:	tcpdpriv-${VERS}.tar.Z
-	tar cf tcpdpriv.web.tar tcpdpriv-${VERS}.tar.Z \
-			tcpdpriv.html tcpdpriv.0.txt attack50/attack50.html
-
-attack50/attack50.html:     attack50.tex
+attack50/attack50.html: Makefile attack50.tex
 	latex2html -split 0 -info "" \
 	    -address "greg minshall <a href=mailto:minshall@ipsilon.com>&lt; minshall@ipsilon.com&gt;</a>" \
 	    attack50
 
-attack50.dvi:	attack50.tex
+attack50.ps: attack50.tex
 	latex attack50.tex
-
-attack50.ps:	attack50.dvi
 	dvips attack50.dvi -q -f < attack50.dvi > attack50.ps
+	rm -f attack50.aux attack50.dvi attack50.log

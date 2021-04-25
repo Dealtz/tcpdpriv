@@ -19,6 +19,7 @@
 .Op Fl q
 .Op Fl r Ar inputfile
 .Op Fl s Ar snaplen
+.Op Fl S Ar {0|1|99}
 .Op Fl T Ar {0|1|99}
 .Op Fl U Ar {0|1|99}
 .Op Fl w Ar outputfile
@@ -44,9 +45,6 @@ is
 deleted.  For example, the data portion of a datagram is not included
 in the output file.
 .Pp
-IP and/or TCP options that are not otherwise specifically enabled are
-replaced with NOPs (0x01, in both cases).
-.Pp
 When a header is changed, the checksum for that header is also updated
 to reflect the change in header data values.
 .Pp
@@ -60,7 +58,7 @@ to those interested in using the output.
 .Pp
 The number ninety-nine (99) generally means "release the information as
 is".  This level is available for IP unicast and multicast addresses,
-classness
+classness, TCP and IP options
 and TCP and UDP port numbers.
 .Pp
 The payload inside an IP protocol type 4 ("ipip" or "ip-encaps") datagram
@@ -80,7 +78,8 @@ Exit after
 .Ar [[hh:]mm:]ss
 time has expired.
 .It Fl A
-How IP addresses should be treated.  Level 0 maps different addresses
+How IP addresses should be treated.  All-zeros and all-ones addresses
+are never changed.  Level 0 maps different addresses
 to integers (counting from 1).  Level 1 maps the upper and lower 16
 bits, separately, to integers (counting from 1); the upper and lower
 maps are independent (so, the address 128.130.128.130 may be mapped
@@ -195,6 +194,9 @@ bytes of data from each packet rather than the default of 88 (with NIT,
 the minimum is actually 96).  See the
 .Xr tcpdump 1
 man page for more information.
+.It Fl S
+How IP and TCP options should be treated.  Level 0 replaces all options
+with NOPs (0x01, in both cases).  Level 1 leaves all the options alone.
 .It Fl T
 Set the mapping for just the TCP port numbers.  See the
 .Fl P
@@ -217,6 +219,7 @@ will be deleted).  See the
 .Xr tcpdump 1
 man page for details on the format of
 .Ar expression .
+.El
 .Sh SEE ALSO
 .Xr netstat 1 ,
 .Xr tcpdump 1 ,
@@ -232,7 +235,7 @@ source distribution).
 The
 .Nm tcpdpriv
 command was written at Ipsilon Networks in 1996.  Many thanks to Vern Paxson
-<vern@ee.lbl.gov> for his help/suggestions during 
+<vern@ee.lbl.gov> for his help/suggestions during
 .Nm tcpdpriv's
 development.
 Thanks also to K. Claffy <kc@nlanr.net> and Tatu Ylonen <tatu@ssh.com>

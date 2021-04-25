@@ -33,6 +33,7 @@ static char rcsid[] =
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include <pcap.h>
 
@@ -59,16 +60,16 @@ int	fprintf __P((FILE *, const char *, ...));
 int 	fputs __P((char *s, FILE *stream));
 #endif	/* defined(sun) && !defined(SVR4) */
 
-/* 
+/*
  * Copy arg vector into a new buffer, concatenating arguments with spaces.
  */
 
 char *
 copy_argv(register char **argv)
-{   
+{
     register char **p;
     register int len = 0;
-    char *buf; 
+    char *buf;
     char *src, *dst;
 
     p = argv;
@@ -108,9 +109,9 @@ copy_argv(register char **argv)
 
 char *
 read_infile(char *fname)
-{       
+{
     struct stat buf;
-    int fd; 
+    int fd;
     char *p;
 
     fd = open(fname, O_RDONLY);
@@ -137,13 +138,13 @@ read_infile(char *fname)
 	exit(2);
     }
 
-    return p;  
-}       
+    return p;
+}
 
 
 
 void
-bpf_dump(FILE *output, struct bpf_program *p, int option)
+local_bpf_dump(FILE *output, struct bpf_program *p, int option)
 {
 	struct bpf_insn *insn;
 	int i;
